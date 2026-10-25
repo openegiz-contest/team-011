@@ -805,8 +805,18 @@ export function createView(container) {
       if (s.gas.visible) s.gas.children.forEach((c, i) => { c.position.y = 50 + 25 * Math.sin(now / 1500 + i); });
       s.zoneLbl.visible = closed;
       if (closed) {
-        setText(s.zoneLbl, phase === "evacuation" ? "эвакуация — взрыв"
-          : (phase === "gas" && blastMode !== "B" ? "газ · проба ВГСЧ" : "закрыто: газ после взрыва"));
+        let ztxt = phase === "evacuation" ? "эвакуация — взрыв"
+          : (phase === "gas" && blastMode !== "B" ? "газ · проба ВГСЧ" : "закрыто: газ после взрыва");
+        if (phase === "gas") {
+          const d = twin("drone-01");
+          const co = val(d, face === "face-lower" ? "co_lower" : "co_upper");
+          const no2 = val(d, face === "face-lower" ? "no2_lower" : "no2_upper");
+          if (co != null || no2 != null) {
+            ztxt += ` · CO ${Number(co).toFixed(1)} NO₂ ${Number(no2).toFixed(1)}`;
+          }
+          if (blastMode === "B" && val(d, "state") === "flying") ztxt = "облёт дрона · " + ztxt;
+        }
+        setText(s.zoneLbl, ztxt);
       }
     }
 

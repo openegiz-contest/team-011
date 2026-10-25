@@ -28,6 +28,18 @@
       <canvas id="map"></canvas>
       <div id="map3d"></div>
       <div id="banner" class="banner"></div>
+      <div id="process" class="process" aria-live="polite">
+        <div class="proc-modes" id="proc_modes">режимы: —</div>
+        <div class="proc-chain" id="proc_chain">
+          <span data-n="face">забои</span><i></i>
+          <span data-n="haul">транспорт</span><i></i>
+          <span data-n="weigh">весы</span><i></i>
+          <span data-n="crush">дробилка</span><i></i>
+          <span data-n="stock">склад</span><i></i>
+          <span data-n="plant">фабрика</span>
+        </div>
+        <div class="proc-note" id="proc_note">цепочка руды из двойников Ditto · последствия сценариев на карте</div>
+      </div>
       <div id="tip" class="tip"></div>
       <div class="viewtoggle"><button id="v2d" class="active">2D</button><button id="v3d">3D</button></div>
       <div class="mapctl" id="mapctl">
@@ -54,6 +66,8 @@
         <span><i class="sq" style="background:#9a9488"></i>вскрыша</span>
         <span><i style="background:#00e5ff"></i>дрон</span>
         <span><i style="background:rgba(255,90,90,.5)"></i>зона закрыта</span>
+        <span><i style="background:#e0b830"></i>поток руды</span>
+        <span><i style="background:#00e5ff"></i>сетка облёта</span>
       </div>
       <div class="maphint" id="maphint">колесо — масштаб · перетаскивание — сдвиг · наведите на технику, чтобы увидеть её двойник</div>
     </section>
@@ -63,6 +77,17 @@
         <button role="tab" data-tab="kpi" aria-selected="false">Показатели</button>
       </nav>
       <div class="pane" data-pane="ctl">
+      <details class="card walk">
+        <summary>Как смотреть стенд · 5 минут</summary>
+        <ol>
+          <li>Зелёный «поток Ditto SSE» — карта читает двойники, не статичную картинку.</li>
+          <li>Цепочка сверху карты: забои → транспорт → весы → дробилка → склад → фабрика; узлы краснеют при простое.</li>
+          <li>Режимы А/Б: включите все в <b>Б</b>, перезапустите смену — тоннаж и простой дробилки сравнимы с А.</li>
+          <li>«Взрыв сейчас»: зоны красные, эвакуация; в Б — облёт дрона и сетка ячеек, в А — «проба ВГСЧ».</li>
+          <li>Сценарии: дождь / закрыть дорогу / остановить дробилку — подписи и потоки на карте меняются сразу.</li>
+          <li>Наведите на самосвал или дробилку — признаки двойника из Ditto.</li>
+        </ol>
+      </details>
       <div class="card advisor">
         <h2>Советник смены <small>сервис advisor-01</small></h2>
         <div id="advice"><p class="hint">Замечаний нет.</p></div>
@@ -118,6 +143,18 @@
       </div>
       </div>
       <div class="pane" data-pane="kpi" hidden>
+      <div class="card">
+        <h2>Калибровка модели <small>python -m openpit.validate</small></h2>
+        <p class="hint">Циклы смены лежат в паспортных диапазонах техники и открытых замерах (см. params.py SOURCES).</p>
+        <dl class="kpi">
+          <dt>Скорость на рампе 10 %</dt><dd>12,0–12,9 км/ч · Cat 793F</dd>
+          <dt>Ковшей на 221 т</dt><dd>4–5 · Hitachi EX5600-6</dd>
+          <dt>Погрузка / разгрузка</dt><dd>2,5–3,1 / 1,0–2,25 мин</dd>
+          <dt>Дизель самосвала</dt><dd>121–240 л/ч · Performance Handbook</dd>
+          <dt>Эффект. часы смены 12 ч</dt><dd>6,6–9,0 ч (пересменка, обед, взрыв)</dd>
+          <dt>Допуск / ПДК</dt><dd>≥ 30 мин · CO 20 / NO₂ 2 мг/м³</dd>
+        </dl>
+      </div>
       <div class="card">
         <h2>Добыча за смену</h2>
         <div class="tiles">

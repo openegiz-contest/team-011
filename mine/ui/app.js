@@ -176,6 +176,7 @@ function onPlant() {
   const pit = twin("pit-01");
   $("cu_ore").textContent = `${fmt(val(pit, "cu_ore_t"), 1)} т · $${fmt((val(pit, "cu_value_usd") || 0) / 1000)} тыс.`;
   $("cu_plant").textContent = `${fmt(val(pl, "cu_t"), 1)} т меди · ${fmt(val(pl, "concentrate_t"))} т конц.`;
+  updateProcessHud();
 }
 
 const DOZER_STATE = { working: "работает", down: "СТОИТ — отвал принимает по одному" };
@@ -256,6 +257,7 @@ function onCrusher() {
   $("crusher_down").textContent = `${fmt(val(c, "down_min"))} мин`;
   $("x50").textContent = `${fmt(val(c, "x50_m"), 2)} м`;
   if (val(g, "threshold_m")) $("threshold").textContent = fmt(val(g, "threshold_m"), 2);
+  updateProcessHud();
 }
 
 const PHASE = { planned: "взрыв в 06:00 смены", evacuation: "эвакуация из карьера", gas: "газ после взрыва", clear: "карьер открыт" };
@@ -282,6 +284,7 @@ function onBlast() {
   const ex = val(p, "gas_exposure_min");
   $("exposure").textContent = ex ? `${fmt(ex, 1)} мин` : "нет";
   $("exposure").style.color = ex ? "#ff7b7b" : "";
+  updateProcessHud();
 }
 
 let paths = null;
@@ -440,6 +443,7 @@ function onPit(t) {
   recordShift(val(t, "last_shift"));
   const shift = val(t, "shift");
   if (shift !== trend.shift || s < trend.last) Object.assign(trend, { shift, last: -1, pts: [[0, 0, 0]] });
+  updateProcessHud();
   if (s - trend.last >= 60 || !trend.pts.length) {
     trend.pts.push([s, val(t, "ore_t") || 0, val(t, "waste_t") || 0]);
     trend.last = s;
@@ -479,6 +483,68 @@ function onControl(t) {
   });
   const sp = val(t, "speedup");
   if (sp != null) $("speedup").value = String(sp);
+  updateProcessHud();
+}
+
+function nodeClass(kind) {
+  if (kind === "ok") return "ok";
+  if (kind === "warn") return "warn";
+  if (kind === "bad") return "bad";
+  return "";
+}
+
+function updateProcessHud() {
+  const ctl = twin("control-01"), pit = twin("pit-01"), c = twin("crusher-01");
+  const sp = twin("stockpile-01"), pl = twin("plant-01"), wb = twin("weighbridge-01");
+  if (!$("proc_modes")) return;
+  const mode = (f, label) => {
+    const v = val(ctl, f) || "A";
+    return `${label} <b class="${v === "B" ? "on" : "off"}">${v}</b>`;
+  };
+  $("proc_modes").innerHTML = `режимы А/Б: ${mode("dispatch_mode", "диспетч.")} · `
+    + `${mode("oversize_mode", "негабарит")} · ${mode("blast_mode", "допуск")}`;
+  const fleet = Object.values(trucks);
+  const haulN = fleet.filter((tr) => tr.state === "hauling" || tr.state === "to_face").length;
+  const qN = fleet.filter((tr) => String(tr.state || "").startsWith("queued")).length;
+  const faceDown = ["shovel-01", "shovel-02"].some((n) => {
+    const st = val(twin(n), "state");
+    return st === "stopped" || st === "down" || st === "blast" || st === "evacuated" || st === "to_safe";
+  });
+  const zoneClosed = val(pit, "zone_lower") === "closed" || val(pit, "zone_upper") === "closed";
+  const cst = val(c, "state");
+  const pst = val(pl, "state");
+  const fill = val(sp, "fill") || 0;
+  const wBusy = val(wb, "state") === "busy" || (val(wb, "queue") || 0) > 0;
+  const nodes = {
+    face: { text: zoneClosed ? "забои · закрыто" : faceDown ? "забои · простой" : "забои",
+      kind: zoneClosed || faceDown ? "bad" : "ok" },
+    haul: { text: qN ? `транспорт · очередь ${qN}` : haulN ? `транспорт · ${haulN} в рейсе` : "транспорт",
+      kind: qN >= 3 ? "warn" : haulN ? "ok" : "" },
+    weigh: { text: wBusy ? "весы · заняты" : "весы", kind: wBusy ? "ok" : "" },
+    crush: { text: cst === "jammed" ? "дробилка · зависание" : cst === "stopped" ? "дробилка · стоп"
+      : cst === "blocked" ? "дробилка · склад полон" : cst === "crushing" ? "дробилка · дробит" : "дробилка",
+      kind: cst === "jammed" || cst === "stopped" || cst === "blocked" ? "bad" : cst === "crushing" ? "ok" : "" },
+    stock: { text: `склад · ${fmt((val(sp, "level_t") || 0) / 1000, 1)} тыс. т`,
+      kind: fill > 0.97 ? "bad" : fill < 0.05 ? "warn" : "ok" },
+    plant: { text: pst === "stopped" ? "фабрика · стоп" : pst === "starved" ? "фабрика · нет руды"
+      : pst === "running" ? "фабрика" : "фабрика",
+      kind: pst === "stopped" ? "bad" : pst === "starved" ? "warn" : pst === "running" ? "ok" : "" },
+  };
+  for (const [n, info] of Object.entries(nodes)) {
+    const el = $("proc_chain")?.querySelector(`[data-n="${n}"]`);
+    if (!el) continue;
+    el.textContent = info.text;
+    el.className = nodeClass(info.kind);
+  }
+  const rate = val(pit, "rate_tph");
+  const note = [];
+  if (rate != null) note.push(`темп ${fmt(rate)} т/ч`);
+  if (val(c, "down_min")) note.push(`простой дробилки ${fmt(val(c, "down_min"))} мин`);
+  if (val(pit, "ore_face_shut_min")) note.push(`рудный забой закрыт ${fmt(val(pit, "ore_face_shut_min"))} мин`);
+  if (drone.flying) note.push("дрон облетает зоны после взрыва");
+  $("proc_note").textContent = note.length
+    ? note.join(" · ")
+    : "цепочка руды из двойников Ditto · последствия сценариев видны на карте";
 }
 
 function onDispatcher(t) {
@@ -814,6 +880,9 @@ function drawSite() {
   const [cx, cy] = geometry.crusher;
   const crusher = twin("crusher-01");
   const cst = val(crusher, "state");
+  const pit = twin("pit-01");
+  const ctl = twin("control-01");
+  const now = performance.now();
   ctx.fillStyle = "#34322d";
   const pad = [Math.max(30, 160 * view.s), Math.max(22, 110 * view.s)];
   ctx.fillRect(X(cx) - pad[0] / 2, Y(cy) - pad[1] / 2, pad[0], pad[1]);
@@ -843,7 +912,17 @@ function drawSite() {
   ctx.fillStyle = "#222a35"; ctx.fillRect(X(cx) + w / 2 + 5, Y(cy) - bh / 2, 6, bh);
   ctx.fillStyle = "#e0b830"; ctx.fillRect(X(cx) + w / 2 + 5, Y(cy) + bh / 2 - bh * fill, 6, bh * fill);
   label("Дробилка Metso 60-89", cx, cy + 95);
-  if (cst === "jammed") label("зависание — расчистка", cx, cy - 85, "#ff7b7b");
+  if (cst === "jammed") {
+    label("зависание — расчистка", cx, cy - 85, "#ff7b7b");
+    const pulse = 0.5 + 0.5 * Math.sin(now / 200);
+    ctx.beginPath();
+    ctx.arc(X(cx), Y(cy), (28 + 10 * pulse) * Math.max(view.s, 0.35), 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255,90,90,${0.35 + 0.35 * pulse})`;
+    ctx.lineWidth = 2; ctx.stroke();
+    if (val(ctl, "oversize_mode") === "B") {
+      label("гидромолот · режим Б", cx, cy - 115, "#7ee2a8");
+    }
+  }
   if (cst === "stopped") label("остановлена", cx, cy - 85, "#ff7b7b");
   if (cst === "blocked") label("склад полон — дробилка ждёт", cx, cy - 85, "#ff7b7b");
   hit("crusher-01", X(cx), Y(cy), 20);
@@ -858,9 +937,6 @@ function drawSite() {
     hit("weighbridge-01", X(wx), Y(wy), 14);
   }
 
-  const pit = twin("pit-01");
-  const ctl = twin("control-01");
-  const now = performance.now();
   for (const [face, f] of Object.entries(geometry.faces)) {
     const [fx, fy] = facePos(face);
     const shovel = twin(f.shovel);
@@ -875,8 +951,19 @@ function drawSite() {
       ctx.setLineDash([]);
       const phase = val(pit, "blast_phase");
       label(phase === "evacuation" ? "эвакуация — взрыв" : "закрыто: газ", fx, fy + 140, "#ff9b9b");
-      if (phase === "gas" && val(ctl, "blast_mode") !== "B") {
-        label("проба ВГСЧ", fx, fy + 175, "#ffb020");
+      if (phase === "gas") {
+        const d = twin("drone-01");
+        const co = val(d, face === "face-lower" ? "co_lower" : "co_upper");
+        const no2 = val(d, face === "face-lower" ? "no2_lower" : "no2_upper");
+        if (co != null || no2 != null) {
+          const over = (co != null && co >= 20) || (no2 != null && no2 >= 2);
+          label(`CO ${fmt(co, 1)} · NO₂ ${fmt(no2, 1)} мг/м³`, fx, fy + 175, over ? "#ff7b7b" : "#7ee2a8");
+        }
+        if (val(ctl, "blast_mode") !== "B") {
+          label("проба ВГСЧ", fx, fy + 210, "#ffb020");
+        } else if (drone.flying) {
+          label("облёт дрона · режим Б", fx, fy + 210, "#00e5ff");
+        }
       }
     }
     drawShovel(px, py, st, now);
@@ -1000,6 +1087,78 @@ function drawRain(w, h) {
       ctx.beginPath(); ctx.moveTo(x + off / 3, y + off); ctx.lineTo(x + off / 3 - 4, y + off + 10); ctx.stroke();
     }
   }
+  label("дождь · сопротивление качению 4 %", 0, geometry.pit.b_m + 120, "#9ccaff");
+}
+
+function drawFlow(now) {
+  if (!geometry || !view) return;
+  const t = (now / 1000) % 1;
+  const drawSeg = (a, b, color, speed = 1) => {
+    if (!a || !b) return;
+    const dx = b[0] - a[0], dy = b[1] - a[1], len = Math.hypot(dx, dy) || 1;
+    const n = Math.max(2, Math.min(8, Math.round(len / 180)));
+    for (let i = 0; i < n; i++) {
+      const u = ((i / n) + t * speed) % 1;
+      const x = a[0] + dx * u, y = a[1] + dy * u;
+      ctx.beginPath();
+      ctx.arc(X(x), Y(y), Math.max(2.2, 3.2 * view.s), 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+    }
+  };
+  const [cx, cy] = geometry.crusher;
+  const [sx, sy] = geometry.stockpile || [cx + 260, cy + 80];
+  if (val(twin("crusher-01"), "state") === "crushing") drawSeg([cx, cy], [sx, sy], "rgba(224,184,48,.85)", 1.2);
+  if (geometry.plant && val(twin("plant-01"), "state") === "running") {
+    const [px, py] = geometry.plant;
+    drawSeg([sx, sy], [px - 70, py], "rgba(60,207,122,.8)", 1.0);
+  }
+  for (const [name, tr] of Object.entries(trucks)) {
+    if (tr.state !== "hauling" && tr.state !== "to_face") continue;
+    const p = truckDisplay(name, tr, now);
+    if (!p) continue;
+    const ore = geometry.faces[tr.face]?.material === "ore";
+    const color = tr.state === "hauling"
+      ? (ore ? "rgba(196,122,53,.55)" : "rgba(154,148,136,.5)")
+      : "rgba(78,161,255,.45)";
+    ctx.beginPath();
+    ctx.arc(X(p.x), Y(p.y), Math.max(5, 7 * view.s), 0, Math.PI * 2);
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
+function drawDroneGrid(now) {
+  if (!drone.flying || !geometry) return;
+  const d = twin("drone-01");
+  const cells = Number(d?.attributes?.cells) || 24;
+  const pit = twin("pit-01");
+  for (const face of Object.keys(geometry.faces)) {
+    const zone = face === "face-lower" ? "zone_lower" : "zone_upper";
+    if (val(pit, zone) !== "closed") continue;
+    const [fx, fy] = facePos(face);
+    const cols = Math.ceil(Math.sqrt(cells));
+    const nrows = Math.ceil(cells / cols);
+    const span = 140;
+    const done = Math.min(cells, Math.floor(((now / 800) + (face === "face-lower" ? 0 : 3)) % (cells + 4)));
+    for (let i = 0; i < cells; i++) {
+      const c = i % cols, r = Math.floor(i / cols);
+      const x = fx - span / 2 + (c + 0.5) * (span / cols);
+      const y = fy - span / 2 + (r + 0.5) * (span / nrows);
+      const lit = i < done;
+      ctx.beginPath();
+      ctx.rect(X(x) - 5 * view.s, Y(y) - 5 * view.s, 10 * view.s, 10 * view.s);
+      ctx.strokeStyle = lit ? "rgba(0,229,255,.85)" : "rgba(0,229,255,.25)";
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      if (lit) {
+        ctx.fillStyle = "rgba(0,229,255,.12)";
+        ctx.fill();
+      }
+    }
+    label(`сетка ${cells} ячеек · облёт`, fx, fy - 200, "#00e5ff", 11);
+  }
 }
 
 function drawScale(w, h) {
@@ -1056,7 +1215,9 @@ function frame(now) {
     drawPit();
     drawSite();
     drawSupport(now);
+    drawFlow(now);
     drawTrucks(now);
+    drawDroneGrid(now);
     drawDrone(now);
     flushLabels();
     drawRain(r.width, r.height);
