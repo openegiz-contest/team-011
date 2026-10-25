@@ -330,4 +330,10 @@ SOURCES = {
     "PIT_STAGES":
         "Assumption: vertical advance 15 m per year, so stages 0-3 are now, +2, +4 and +6 years "
         "(ore bench at -165, -195, -225, -255 m). Typical vertical advance of large open pits is 10-30 m/y.",
+    "annualisation (validate t_per_t_capacity, t_per_m3_bucket)":
+        "A DES shift is not multiplied by 730. Annual productive hours = scheduled engine hours × PA × UOA: "
+        "4500 h/y (OEM planning often 5000-6000; Kazakhstan climate/overhaul pulls toward the low end), "
+        "PA 0.88 (from truck.mtbf/mttr), UOA 0.65 (inside JAMERE 59-75 % utilisation). Nameplate haul "
+        "capacity includes ~25 % spares (SPARE_FACTOR 1.25), as in fleet-sizing benchmarks. Naive "
+        "shift×730 is reported in validate context only as a contrast.",
 }
