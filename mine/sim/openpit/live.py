@@ -134,6 +134,9 @@ class LiveRunner:
         self.model = None
         self.dispatcher = None
         self.geometry_stage = None
+        # Last published twin features — skip MQTT when nothing changed (cuts
+        # Ditto/connectivity load that otherwise freezes the UI at high speedup).
+        self._last_snap: dict[str, dict] = {}
         # State the next shift starts from; a restart repeats the shift from
         # the same state, a change of stage starts afresh.
         self.carry_next: dict | None = None
@@ -247,7 +250,10 @@ class LiveRunner:
         snap = snapshot(self.model, self.modes, self.shift)
         snap["pit-01"]["last_shift"] = {"value": json.dumps(self.last_shift)}
         for name, features in snap.items():
+            if self._last_snap.get(name) == features:
+                continue
             self.bus.send(name, modify_features(name, features))
+            self._last_snap[name] = features
 
     def run(self) -> None:
         self.bus.connect()

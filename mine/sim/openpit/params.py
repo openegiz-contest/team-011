@@ -123,6 +123,10 @@ class Site:
     headway_s: float = 10.0
     waste_dump_spots: int = 3
     waste_dump_min: tuple = (1.0, 1.2)
+    # Ore trucks stop on a single-lane weighbridge before the dump pocket.
+    weighbridge_lanes: int = 1
+    weigh_min: tuple = (0.5, 0.8)
+    weigh_cv: float = 0.01
     workshop_bays: int = 2
     fuel_bays: int = 2
     # A broken-down truck on the road: the others pass it one lane at a time.
@@ -238,6 +242,10 @@ SOURCES = {
         "(about two truckloads). https://www.metso.com/globalassets/portfolio/lokotrack-lt-series/superior-mkiii-primary-gyratory-4435-03-25-web.pdf",
     "crusher.dump_min, site.waste_dump_min":
         "Caterpillar Performance Handbook ed. 50: maneuver and dump time at dump point 1.0-1.2 min.",
+    "site.weighbridge_lanes, weigh_min, weigh_cv":
+        "Assumption: one in-motion / static truck scale on the crusher approach; spotting and weigh "
+        "0.5-0.8 min (typical open-pit weighbridge cycle for ultra-class trucks); scale reading CV 1 % "
+        "on top of shovel fill. Ore tonnes for the shift are booked from this reading; waste skips the scale.",
     "ORE, WASTE":
         "Assumption: hard-rock copper porphyry densities 2.6-2.7 t/m3, swell factor 1.40.",
     "site.rolling_resistance":

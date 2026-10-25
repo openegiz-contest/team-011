@@ -80,6 +80,9 @@ def definitions(model) -> dict:
                pdk_mg_m3=dict(p.blasting.pdk_mg_m3)),
         _thing("crusher-01", "crusher", snap["crusher-01"], model=p.crusher.model,
                rated_tph=p.crusher.rate_tph, feed_opening_mm=p.crusher.feed_opening_mm, position=pit.crusher),
+        _thing("weighbridge-01", "weighbridge", snap["weighbridge-01"], lanes=p.site.weighbridge_lanes,
+               weigh_min=list(p.site.weigh_min), position=pit.weighbridge, road="road-crusher",
+               role="ore trucks are weighed here; shift ore_t is booked from the scale reading"),
         _thing("dump-01", "waste-dump", snap["dump-01"], spots=p.site.waste_dump_spots, position=pit.waste_dump,
                road="road-dump"),
         _thing("dump-02", "waste-dump", snap["dump-02"], spots=p.site.waste_dump_spots, position=pit.reserve_dump,
@@ -103,7 +106,8 @@ def definitions(model) -> dict:
                            "set it back to the default to undo"),
     ])
     for road, points in pit.roads.items():
-        ends = {"road-ramp": ["face-upper", "face-lower", "pit-exit"], "road-crusher": ["pit-exit", "crusher-01"],
+        ends = {"road-ramp": ["face-upper", "face-lower", "pit-exit"],
+                "road-crusher": ["pit-exit", "weighbridge-01", "crusher-01"],
                 "road-dump": ["pit-exit", "dump-01"], "road-dump-2": ["pit-exit", "dump-02"],
                 "road-service": ["road-crusher", "fuel-01", "parking", "workshop-01"]}[road]
         things.update([_thing(road, "road", snap[road], connects=ends, length_m=round(_length(points)),
@@ -137,6 +141,8 @@ def snapshot(model, modes: dict, shift: int) -> dict[str, dict]:
             "total_t": {"value": round(m.total_t, 1), "unit": "t"},
             "ore_t": {"value": round(m.ore_t, 1), "unit": "t"},
             "waste_t": {"value": round(m.waste_t, 1), "unit": "t"},
+            "weighed_t": {"value": round(m.weighed_t, 1), "unit": "t"},
+            "weighs": {"value": m.weighs},
             "rate_tph": {"value": round(m.total_t / hours, 1), "unit": "t/h"},
             "fuel_l": {"value": round(m.fuel_l, 1), "unit": "L"},
             "l_per_t_ore": {"value": round(m.fuel_by_material_l["ore"] / m.ore_t, 4) if m.ore_t else 0, "unit": "L/t"},
@@ -183,6 +189,14 @@ def snapshot(model, modes: dict, shift: int) -> dict[str, dict]:
             "rockbreaks": {"value": m.rockbreaks},
             "x50_m": {"value": round(model.x50(), 3), "unit": "m"},
             "blocked_min": {"value": round(m.crusher_blocked_s / 60, 1), "unit": "min"},
+        },
+        "weighbridge-01": {
+            "state": {"value": "busy" if model.weighbridge.count else "idle"},
+            "queue": {"value": len(model.weighbridge.queue)},
+            "weighs": {"value": m.weighs},
+            "weighed_t": {"value": round(m.weighed_t, 1), "unit": "t"},
+            "busy_min": {"value": round(m.weigh_s / 60, 1), "unit": "min"},
+            "queue_min": {"value": round(m.weigh_queue_s / 60, 1), "unit": "min"},
         },
         "drone-01": {
             "state": {"value": "flying" if drone else "docked"},

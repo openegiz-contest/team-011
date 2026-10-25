@@ -124,12 +124,15 @@ class Pit:
         # Park-up beside the service road to the workshop: trucks start and end
         # the shift here, each in its own bay.
         junction_plant = (exit_[0] + 400.0, exit_[1] + 300.0, 0.0)
+        # Single-lane truck scale on the crusher approach, just before the pocket.
+        self.weighbridge: Point = _lerp(junction_plant, self.crusher, 0.88)
         self.parking: Point = _lerp(junction_plant, self.workshop, 0.7)
         self.fuel: Point = _lerp(junction_plant, self.workshop, 0.35)
         self.fuel_station: Point = _bays(junction_plant, self.workshop, self.fuel, 1, off=-45.0)[0]
         self.bays = _bays(junction_plant, self.workshop, self.parking, site.trucks)
         self.bay_exits = _bays(junction_plant, self.workshop, self.parking, site.trucks, off=0.0)
-        self.points = {"crusher": self.crusher, "dump": self.waste_dump, "dump-2": self.reserve_dump,
+        self.points = {"crusher": self.crusher, "weighbridge": self.weighbridge,
+                       "dump": self.waste_dump, "dump-2": self.reserve_dump,
                        "workshop": self.workshop, "parking": self.parking, "fuel": self.fuel}
         self.faces = {
             "face-upper": Face("face-upper", "shovel-01", WASTE, "dump", self.face_position("face-upper", 0.0)),
@@ -137,7 +140,8 @@ class Pit:
         }
         junction_dump = (exit_[0] - 150.0, exit_[1] + 300.0, 0.0)
         self.surface = {
-            "crusher": [exit_, junction_plant, self.crusher],
+            "crusher": [exit_, junction_plant, self.weighbridge, self.crusher],
+            "weighbridge": [exit_, junction_plant, self.weighbridge],
             "dump": [exit_, junction_dump, self.waste_dump],
             "dump-2": [exit_, (exit_[0] + 100.0, exit_[1] + 700.0, 0.0),
                        (exit_[0] - 700.0, exit_[1] + 900.0, 0.0), self.reserve_dump],
@@ -208,6 +212,7 @@ class Pit:
                     "benches_z": [UPPER_BENCH_Z, self.lower_z]},
             "ramp": self.ramp,
             "crusher": self.crusher,
+            "weighbridge": self.weighbridge,
             "waste_dump": self.waste_dump,
             "reserve_dump": self.reserve_dump,
             "workshop": self.workshop,

@@ -82,6 +82,10 @@ class Metrics:
     cu_ore_t: float = 0.0
     cu_plant_t: float = 0.0
     concentrate_t: float = 0.0
+    weighs: int = 0
+    weighed_t: float = 0.0
+    weigh_s: float = 0.0
+    weigh_queue_s: float = 0.0
 
     @property
     def total_t(self) -> float:
@@ -213,6 +217,7 @@ class MineModel(PitKnowledge):
         self.waste_dump = self.dumps["dump"]
         self.workshop = simpy.Resource(self.env, capacity=params.site.workshop_bays)
         self.fuel_bays = simpy.Resource(self.env, capacity=params.site.fuel_bays)
+        self.weighbridge = simpy.Resource(self.env, capacity=params.site.weighbridge_lanes)
         self.fuel_queue = 0
         self._closing = {face: self.env.event() for face in self.pit.faces}
         self._rock_wait: dict = {}
@@ -451,9 +456,11 @@ class MineModel(PitKnowledge):
             yield from self._drive(truck, self.loaded_route(face_name), truck.payload_t, rng, can_fail=True)
             truck.location = dest
 
-            truck.state = "queued_at_dump"
-            arrived = env.now
             if dest == "crusher":
+                # Ore is booked at the weighbridge, then the truck tips into the pocket.
+                yield from self._weigh(truck, rng)
+                truck.state = "queued_at_dump"
+                arrived = env.now
                 with self.crusher.dump.request() as req:
                     yield req
                     yield self.crusher.pocket.put(truck.payload_t)
@@ -470,6 +477,8 @@ class MineModel(PitKnowledge):
                 ore = self.p.ore
                 self.metrics.cu_ore_t += truck.payload_t * ore.cu_grade * ore.recovery
             else:
+                truck.state = "queued_at_dump"
+                arrived = env.now
                 with self.dumps[dest].request(priority=1) as req:
                     yield req
                     waited = env.now - arrived
@@ -627,6 +636,29 @@ class MineModel(PitKnowledge):
             # The driver has had the meal while the truck was in the workshop.
             truck.meal_done = truck.meal_done or env.now >= truck.meal_at
         truck.dispatched_at = env.now
+
+    def _weigh(self, truck: Truck, rng: random.Random):
+        """Single-lane truck scale on the crusher approach: queue, spot, weigh.
+        The scale reading becomes the booked payload for ore KPI."""
+        env, m = self.env, self.metrics
+        truck.state = "queued_at_weigh"
+        truck.location = "weighbridge"
+        arrived = env.now
+        with self.weighbridge.request() as req:
+            yield req
+            waited = env.now - arrived
+            m.truck_queue_s += waited
+            m.weigh_queue_s += waited
+            self._idle(truck, waited)
+            truck.state = "weighing"
+            weigh_s = rng.uniform(*self.p.site.weigh_min) * 60
+            yield env.timeout(weigh_s)
+            self._idle(truck, weigh_s)
+            m.weigh_s += weigh_s
+            truck.payload_t = truck.payload_t * max(0.97, rng.gauss(1.0, self.p.site.weigh_cv))
+            m.weighed_t += truck.payload_t
+            m.weighs += 1
+        truck.location = "crusher"
 
     def _dig(self, face: str, tonnes: float) -> None:
         """Take a load out of the blasted rock; the face moves forward."""

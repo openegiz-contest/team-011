@@ -5,11 +5,13 @@ const API = "/ditto/api/2";
 const SHIFT_S = 12 * 3600;
 const COLORS = {
   to_face: "#4ea1ff", hauling: "#3ccf7a", loading: "#ffb020", queued_at_shovel: "#ff5a5a",
-  queued_at_dump: "#ff5a5a", dumping: "#b77dff", awaiting_dispatch: "#8892a6", parked: "#8892a6",
+  queued_at_dump: "#ff5a5a", queued_at_weigh: "#ff5a5a", weighing: "#c9a227", dumping: "#b77dff",
+  awaiting_dispatch: "#8892a6", parked: "#8892a6",
   to_workshop: "#e05cc0", repair: "#e05cc0", handover: "#5d6573", break: "#5d6573", refuel: "#2bb3a3",
   pre_start: "#5d6573", to_parking: "#9aa4b5", to_fuel: "#2bb3a3", repair_queue: "#e05cc0", breakdown: "#ff2d2d",
 };
-const WORKING = new Set(["to_face", "hauling", "loading", "queued_at_shovel", "queued_at_dump", "dumping", "awaiting_dispatch"]);
+const WORKING = new Set(["to_face", "hauling", "loading", "queued_at_shovel", "queued_at_dump",
+  "queued_at_weigh", "weighing", "dumping", "awaiting_dispatch"]);
 const LOAD_COLORS = { ore: "#c47a35", waste: "#9a9488", empty: "#2b3038" };
 const WHATIF_DEFAULTS = {
   shovel_01_down: false, shovel_02_down: false, crusher_stop: false, road_dump_closed: false,
@@ -26,7 +28,9 @@ const STAGE_YEARS = [0, 2, 4, 6];
 const FACE_LABEL = { "face-upper": "вскрыша", "face-lower": "руда" };
 const STATE_RU = {
   to_face: "порожний рейс к забою", hauling: "гружёный рейс", loading: "погрузка",
-  queued_at_shovel: "очередь у экскаватора", queued_at_dump: "очередь на разгрузку", dumping: "разгрузка",
+  queued_at_shovel: "очередь у экскаватора", queued_at_dump: "очередь на разгрузку",
+  queued_at_weigh: "очередь на весах", weighing: "весовка", dumping: "разгрузка",
+  weighbridge: "весы", busy: "заняты",
   awaiting_dispatch: "ждёт назначения", parked: "стоянка", to_workshop: "едет в мастерскую", repair: "ремонт",
   idle: "ожидает", blast: "закрыт на взрыв", to_safe: "уходит из зоны взрыва", evacuated: "эвакуирован (безопасная площадка)",
   to_face: "возвращается к забою", down: "отказ", stopped: "остановлен", crushing: "дробит",
@@ -843,6 +847,16 @@ function drawSite() {
   if (cst === "stopped") label("остановлена", cx, cy - 85, "#ff7b7b");
   if (cst === "blocked") label("склад полон — дробилка ждёт", cx, cy - 85, "#ff7b7b");
   hit("crusher-01", X(cx), Y(cy), 20);
+
+  if (geometry.weighbridge) {
+    const [wx, wy] = geometry.weighbridge;
+    const wb = twin("weighbridge-01");
+    const wq = val(wb, "queue") || 0, busy = val(wb, "state") === "busy";
+    building(wx, wy, 36, 18, busy ? "#4a3c12" : "#2a2e36", busy ? "#c9a227" : "#8b949e", 14, 8);
+    label(busy || wq ? `Весы · ${busy ? "взвешивание" : "очередь"}${wq ? ` ${wq}` : ""}` : "Весы (руда)",
+      wx, wy - 40, busy || wq ? "#c9a227" : "#8b949e", 11);
+    hit("weighbridge-01", X(wx), Y(wy), 14);
+  }
 
   const pit = twin("pit-01");
   const ctl = twin("control-01");
