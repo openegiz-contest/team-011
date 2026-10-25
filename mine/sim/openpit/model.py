@@ -959,14 +959,32 @@ class MineModel(PitKnowledge):
         if dz._downs == 0:
             dz.state = "working"
 
+    def _grader_loop(self) -> list:
+        """One continuous closed patrol on real haul geometry — no teleport
+        chords between the ore and waste routes."""
+        lower = self.loaded_route("face-lower").points
+        upper = self.loaded_route("face-upper").points
+        to_upper = self.pit.between("face-lower", "face-upper").points
+        to_lower = self.pit.between("face-upper", "face-lower").points
+        # lower out-and-back → bench link → upper out-and-back → link home
+        pts = (
+            list(lower) + list(reversed(lower))[1:]
+            + list(to_upper)[1:]
+            + list(upper)[1:] + list(reversed(upper))[1:]
+            + list(to_lower)[1:]
+        )
+        return _dedup(pts)
+
     def _grader(self):
         """In rain the grader works the haul roads; rolling resistance comes
-        down from 4 % towards 3 % as it covers the network."""
+        down from 4 % towards 3 % as it covers the network.
+
+        Position stays on the road polyline (never a chord across the pit)."""
         gr, s = self.grader, self.p.support
         park = gr.xy
-        loop = _dedup(self.loaded_route("face-lower").points + tuple(reversed(self.loaded_route("face-lower").points)))
+        speed_mps = 3.5  # ~12.5 km/h while grading
         while True:
-            yield self.env.timeout(60.0)
+            yield self.env.timeout(5.0)
             if not self.whatif["rain"]:
                 gr.since, gr.state, gr.xy = None, "parked", park
                 continue
@@ -977,7 +995,7 @@ class MineModel(PitKnowledge):
             f = min(1.0, worked / (s.grade_network_h * 3600))
             rr = RAIN_ROLLING_RESISTANCE - (RAIN_ROLLING_RESISTANCE - s.graded_rolling_resistance) * f
             self.set_rolling_resistance(round(rr, 3))
-            gr.xy = _along(loop, worked * 3.0)
+            gr.xy = _along(self._grader_loop(), worked * speed_mps)
 
     def _shovel_failures(self, shovel: Shovel):
         rng = stream(self.seed, f"{shovel.name}-failures")

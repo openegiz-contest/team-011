@@ -201,10 +201,19 @@ function onService() {
 
 const support = {};
 function moveSupport(name, t) {
+  // Same as trucks: follow the haul-road polyline between telemetry points.
+  // Straight-line lerp cut across the pit when the grader jumped 100+ m along a curve.
+  const x = val(t, "x"), y = val(t, "y"), z = val(t, "z") || 0;
+  if (x == null) return;
   const now = performance.now();
-  const s = (support[name] ||= { fx: val(t, "x"), fy: val(t, "y"), tx: val(t, "x"), ty: val(t, "y"), t0: now });
+  const s = (support[name] ||= { fx: x, fy: y, fz: z, tx: x, ty: y, tz: z, t0: now, heading: 0, _support: true });
   const p = truckPos(s, now);
-  Object.assign(s, { fx: p.x, fy: p.y, tx: val(t, "x"), ty: val(t, "y"), t0: now, state: val(t, "state") });
+  const moved = Math.hypot(x - p.x, y - p.y) > 2;
+  s.track = moved ? findPath(p, { x, y, z }, 45) : null;
+  if (moved && !s.track) s.heading = Math.atan2(-(y - p.y), x - p.x);
+  Object.assign(s, {
+    fx: p.x, fy: p.y, fz: p.z || 0, tx: x, ty: y, tz: z, t0: now, state: val(t, "state"), _support: true,
+  });
 }
 
 let advice = [];
@@ -344,12 +353,12 @@ function pointAt(path, s) {
     dir: Math.atan2(-(b[1] - a[1]), b[0] - a[0]) };
 }
 
-function findPath(from, to) {
+function findPath(from, to, maxOff = 25) {
   if (!paths) return null;
   let best = null;
   for (const path of paths) {
     const p0 = project(path, from.x, from.y, from.z), p1 = project(path, to.x, to.y, to.z);
-    if (p0.d > 25 || p1.d > 25) continue;
+    if (p0.d > maxOff || p1.d > maxOff) continue;
     const cost = p0.d + p1.d + 0.01 * Math.abs(p1.s - p0.s);
     if (!best || cost < best.cost) best = { cost, path, s0: p0.s, s1: p1.s };
   }
@@ -409,12 +418,18 @@ function moveTruck(name, t) {
 }
 
 function truckPos(tr, now) {
-  const k = Math.min(1, (now - tr.t0) / 1000);
+  // Support (grader) can jump hundreds of metres along a road between MQTT
+  // ticks at high speedup — stretch the lerp so it rides the polyline, not a chord.
+  let dur = 1000;
+  if (tr.track && tr._support) {
+    dur = Math.min(2800, Math.max(1000, Math.abs(tr.track.s1 - tr.track.s0) / 100 * 1000));
+  }
+  const k = Math.min(1, (now - tr.t0) / dur);
   if (tr.track) {
     const { path, s0, s1 } = tr.track;
     const s = s0 + (s1 - s0) * k, p = pointAt(path, s);
     tr.heading = s1 >= s0 ? p.dir : p.dir + Math.PI;
-    return { ...p, ends: Math.min(s, path.cum[path.cum.length - 1] - s) };
+    return { ...p, heading: tr.heading, ends: Math.min(s, path.cum[path.cum.length - 1] - s) };
   }
   return { x: tr.fx + (tr.tx - tr.fx) * k, y: tr.fy + (tr.ty - tr.fy) * k, z: (tr.fz || 0) + ((tr.tz || 0) - (tr.fz || 0)) * k };
 }
@@ -1045,8 +1060,10 @@ function drawSupport(now) {
     const p = truckPos(s, now);
     const dozer = name.startsWith("dozer"), down = s.state === "down";
     const color = down ? "#ff5a5a" : dozer ? "#e0b830" : s.state === "grading" ? "#ffd84d" : "#a89a5a";
+    const heading = p.heading ?? p.dir ?? s.heading ?? 0;
     ctx.save();
     ctx.translate(X(p.x), Y(p.y));
+    ctx.rotate(heading);
     ctx.scale(k, k);
     ctx.fillStyle = "rgba(0,0,0,.4)"; ctx.fillRect(-7, -4, 16, 10);
     ctx.fillStyle = color;

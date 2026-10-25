@@ -846,8 +846,15 @@ export function createView(container) {
       const s = support[name];
       if (!s || s.tx == null) continue;
       const p = truckPos(s, now);
-      const prev = m.userData.last;
-      if (prev && Math.hypot(p.x - prev.x, p.y - prev.y) > 0.5) m.rotation.y = Math.atan2(p.y - prev.y, p.x - prev.x);
+      // Prefer path heading (road-following); fall back to motion delta.
+      const heading = p.heading ?? p.dir ?? s.heading;
+      if (heading != null) m.rotation.y = heading;
+      else {
+        const prev = m.userData.last;
+        if (prev && Math.hypot(p.x - prev.x, p.y - prev.y) > 0.5) {
+          m.rotation.y = Math.atan2(p.y - prev.y, p.x - prev.x);
+        }
+      }
       m.userData.last = { x: p.x, y: p.y };
       m.position.set(p.x, at(p.x, p.y), -p.y);
       m.visible = true;
