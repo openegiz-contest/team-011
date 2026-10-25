@@ -55,7 +55,10 @@ example-mine-stop:
 pit: up
 	$(COMPOSE_BASE) -f $(PIT_COMPOSE) up -d --build --wait --wait-timeout 300
 	@touch $(PIT_MARKER)
-	@echo "NETA open pit running: UI http://127.0.0.1:8095/  Grafana -> Карьер NETA — модули 1–3"
+	@echo "NETA open pit running."
+	@echo "  Map (2D/3D, modes A/B, what-if)  http://127.0.0.1:8095/"
+	@echo "  Ditto                              http://127.0.0.1:$${DITTO_PORT:-8080}/"
+	@echo "  Grafana → Карьер NETA — модули 1–3  (login printed above by make up)"
 
 ## A/B experiment for every module: replicated shifts, mean and 95 % CI (no platform needed)
 pit-experiment:
