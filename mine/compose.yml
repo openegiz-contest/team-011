@@ -1,0 +1,101 @@
+# NETA open pit: an overlay on deploy/compose/docker-compose.yml.
+# Started by `make pit` from the repository root.
+
+services:
+  pit-setup:
+    build: ../../mine/sim
+    image: neta/pit:local
+    restart: "no"
+    command: ["python", "-m", "openpit.setup_twins"]
+    environment:
+      DITTO_URL: http://ditto-nginx:80
+      DITTO_PASSWORD: ${DITTO_PASSWORD}
+    depends_on:
+      init:
+        condition: service_completed_successfully
+
+  # Same image as pit-setup, which builds it (one `build:` per image, see
+  # examples/mine/compose.yml for why).
+  pit-dispatcher:
+    image: neta/pit:local
+    pull_policy: never
+    restart: unless-stopped
+    mem_limit: 128m
+    command: ["python", "-m", "openpit.dispatcher_service"]
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+    depends_on:
+      pit-setup:
+        condition: service_completed_successfully
+
+  pit-safety:
+    image: neta/pit:local
+    pull_policy: never
+    restart: unless-stopped
+    mem_limit: 128m
+    command: ["python", "-m", "openpit.safety_service"]
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+    depends_on:
+      pit-setup:
+        condition: service_completed_successfully
+
+  pit-advisor:
+    image: neta/pit:local
+    pull_policy: never
+    restart: unless-stopped
+    mem_limit: 128m
+    command: ["python", "-m", "openpit.advisor_service"]
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+    depends_on:
+      pit-setup:
+        condition: service_completed_successfully
+
+  pit-ui:
+    image: docker.io/library/nginx:1.25-alpine
+    restart: unless-stopped
+    mem_limit: 64m
+    environment:
+      DITTO_BASIC_AUTH: ${DITTO_BASIC_AUTH}
+      NGINX_ENVSUBST_FILTER: ^DITTO_BASIC_AUTH$$
+    ports:
+      - "${PIT_UI_BIND:-${OPENEGIZ_BIND:-127.0.0.1}}:${PIT_UI_PORT:-8095}:80"
+    volumes:
+      - ../../mine/ui:/usr/share/nginx/html:ro
+      - ../../mine/ui/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
+    depends_on:
+      ditto-nginx:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  grafana:
+    volumes:
+      - ../../mine/grafana/neta-pit.json:/var/lib/grafana/example-dashboards/neta-pit.json:ro
+
+  pit-live:
+    image: neta/pit:local
+    pull_policy: never
+    restart: unless-stopped
+    mem_limit: 192m
+    command: ["python", "-m", "openpit.live"]
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: "1883"
+      DITTO_URL: http://ditto-nginx:80
+      DITTO_PASSWORD: ${DITTO_PASSWORD}
+      SIM_SEED: ${SIM_SEED:-1}
+    depends_on:
+      pit-setup:
+        condition: service_completed_successfully
+      pit-dispatcher:
+        condition: service_started
+      pit-safety:
+        condition: service_started

@@ -1,5 +1,5 @@
 # team/
 
-Directory for the Team's code: services, simulators, models, dashboards, 3D scenes. Using this directory is optional: any part may be changed, including the core of OpenEgiz v1.0.4.
+Основной код сдачи лежит в [`../mine/`](../mine/) (симулятор, сервисы модулей, UI, Grafana) и подключается через `make pit` / `mine/compose.yml`.
 
-The [Example Mine](../examples/mine/) shows how twins are structured, how telemetry is sent and how to connect your own service to `make up` through an overlay `compose.yml`.
+Папка `team/` оставлена по шаблону конкурса; при необходимости сюда можно добавить вспомогательные скрипты команды.

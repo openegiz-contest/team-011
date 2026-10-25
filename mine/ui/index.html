@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Карьер NETA — цифровой двойник на OpenEgiz</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">{ "imports": { "three": "./vendor/three/three.module.min.js" } }</script>
+</head>
+<body>
+  <header>
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M2 9h28l-5 6H7z" fill="#c47a35"/><path d="M7 15h18l-4 5H11z" fill="#9a7a52"/><path d="M11 20h10l-3 4h-4z" fill="#6f5d45"/><circle cx="24" cy="6" r="2.4" fill="#3ccf7a"/></svg>
+      <h1>Карьер NETA <span>цифровой двойник на OpenEgiz</span></h1>
+    </div>
+    <div class="hkpi">
+      <div class="hk clockbox"><small>Смена <span id="shift">—</span></small><b id="clock">00:00</b><div class="bar mini"><div id="progress"></div></div></div>
+      <div class="hk"><small>Перевезено</small><b id="h_total">—</b></div>
+      <div class="hk"><small>Темп</small><b id="h_rate">—</b></div>
+      <div class="hk"><small>Медь в руде</small><b id="h_cu">—</b></div>
+      <div class="hk"><small>Самосвалы в работе</small><b id="h_fleet">—</b></div>
+      <div class="hk"><small>Взрыв</small><b id="h_blast">—</b></div>
+    </div>
+    <div id="link" class="link off">нет связи с Ditto</div>
+  </header>
+  <main>
+    <section class="map">
+      <canvas id="map"></canvas>
+      <div id="map3d"></div>
+      <div id="banner" class="banner"></div>
+      <div id="tip" class="tip"></div>
+      <div class="viewtoggle"><button id="v2d" class="active">2D</button><button id="v3d">3D</button></div>
+      <div class="mapctl" id="mapctl">
+        <button id="zoom_in" title="Приблизить">+</button>
+        <button id="zoom_out" title="Отдалить">−</button>
+        <button id="zoom_reset" title="Весь карьер">⤢</button>
+      </div>
+      <div class="legend">
+        <b>Кабина:</b>
+        <span><i style="background:#4ea1ff"></i>порожний рейс</span>
+        <span><i style="background:#3ccf7a"></i>гружёный рейс</span>
+        <span><i style="background:#ffb020"></i>погрузка</span>
+        <span><i style="background:#ff5a5a"></i>очередь</span>
+        <span><i style="background:#b77dff"></i>разгрузка</span>
+        <span><i style="background:#8892a6"></i>стоянка</span>
+        <span><i style="background:#5d6573"></i>пересменка, обед</span>
+        <span><i style="background:#2bb3a3"></i>заправка</span>
+        <span><i style="background:#e05cc0"></i>ремонт</span>
+        <span><i style="background:#ff2d2d"></i>поломка в пути</span>
+        <span><i style="background:#e0b830"></i>бульдозер, грейдер</span>
+        <b>Кузов:</b>
+        <span><i class="sq" style="background:#c47a35"></i>руда</span>
+        <span><i class="sq" style="background:#9a9488"></i>вскрыша</span>
+        <span><i style="background:#00e5ff"></i>дрон</span>
+        <span><i style="background:rgba(255,90,90,.5)"></i>зона закрыта</span>
+      </div>
+      <div class="maphint" id="maphint">колесо — масштаб · перетаскивание — сдвиг · наведите на технику, чтобы увидеть её двойник</div>
+    </section>
+    <aside>
+      <nav class="tabs" role="tablist">
+        <button role="tab" data-tab="ctl" class="active" aria-selected="true">Управление <span id="adv_n" class="badge"></span></button>
+        <button role="tab" data-tab="kpi" aria-selected="false">Показатели</button>
+      </nav>
+      <div class="pane" data-pane="ctl">
+      <div class="card advisor">
+        <h2>Советник смены <small>сервис advisor-01</small></h2>
+        <div id="advice"><p class="hint">Замечаний нет.</p></div>
+        <details class="adv-hist"><summary>История советов за смену <span id="advice_hist_n"></span></summary>
+          <div id="advice_hist"><p class="hint">Пока нет закрытых советов.</p></div></details>
+      </div>
+      <div class="card">
+        <h2>Режимы стенда</h2>
+        <div class="toggle" data-feature="dispatch_mode">
+          <div><b>1. Диспетчеризация</b><small>А: закрепление 5/5 · Б: сервис диспетчера</small></div>
+          <div class="ab"><button data-v="A">А</button><button data-v="B">Б</button></div>
+        </div>
+        <div class="toggle" data-feature="oversize_mode">
+          <div><b>2. Контроль негабарита</b><small>А: заклинивание дробилки · Б: камера + гидромолот</small></div>
+          <div class="ab"><button data-v="A">А</button><button data-v="B">Б</button></div>
+        </div>
+        <div class="toggle" data-feature="blast_mode">
+          <div><b>3. Допуск после взрыва</b><small>А: по регламенту · Б: по замерам дрона</small></div>
+          <div class="ab"><button data-v="A">А</button><button data-v="B">Б</button></div>
+        </div>
+        <div class="row">
+          <label>Ускорение
+            <select id="speedup"><option>10</option><option>30</option><option>60</option><option>120</option></select>
+          </label>
+          <button id="restart" class="primary">Перезапустить смену</button>
+        </div>
+        <p class="hint">Режимы действуют сразу (допуск после взрыва — со следующего взрыва). Перезапуск повторяет ту же смену с теми же случайными событиями, поэтому А и Б сравниваются в одинаковых условиях.</p>
+      </div>
+      <div class="card">
+        <h2>Сценарии «что если» <small>двойник whatif-01</small></h2>
+        <div class="scen" data-feature="shovel_01_down"><span>Остановить экскаватор вскрыши (shovel-01)</span><button class="sw" role="switch" aria-checked="false"></button></div>
+        <div class="scen" data-feature="shovel_02_down"><span>Остановить экскаватор руды (shovel-02)</span><button class="sw" role="switch" aria-checked="false"></button></div>
+        <div class="scen" data-feature="crusher_stop"><span>Плановая остановка дробилки</span><button class="sw" role="switch" aria-checked="false"></button></div>
+        <div class="scen" data-feature="road_dump_closed"><span>Закрыть дорогу на отвал → резервный отвал</span><button class="sw" role="switch" aria-checked="false"></button></div>
+        <div class="scen" data-feature="rain"><span>Дождь: сопротивление качению 2 % → 4 %</span><button class="sw" role="switch" aria-checked="false"></button></div>
+        <div class="scen" data-feature="poor_blast"><span>Плохо взорванный блок: x50 0,30 м</span><button class="sw" role="switch" aria-checked="false"></button></div>
+        <div class="scen" data-feature="calm_wind"><span>Безветрие при взрыве (1 м/с)</span><button class="sw" role="switch" aria-checked="false"></button></div>
+        <div class="scen" data-feature="plant_stop"><span>Остановка фабрики (ремонт мельницы)</span><button class="sw" role="switch" aria-checked="false"></button></div>
+        <div class="scen" data-feature="dozer_down"><span>Бульдозер на отвале встал → отвал принимает по одному</span><button class="sw" role="switch" aria-checked="false"></button></div>
+        <div class="scen-row">
+          <label>Этап карьера
+            <select id="pit_stage"><option value="0">сейчас, дно −165 м</option><option value="1">через 2 года, −195 м</option><option value="2">через 4 года, −225 м</option><option value="3">через 6 лет, −255 м</option></select>
+          </label>
+        </div>
+        <div class="scen-row">
+          <label>Самосвалов в ремонте
+            <select id="repair"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select>
+          </label>
+          <button id="blast_now">Взрыв сейчас</button>
+        </div>
+        <div class="row"><span id="scen_count" class="hint">Активных сценариев: 0</span><button id="scen_reset">Отменить все</button></div>
+        <p class="hint">Сценарий меняет условия сразу, без перезапуска. Повторное нажатие или «Отменить все» возвращает исходное состояние. Смена этапа карьера перестраивает геометрию и начинает смену заново.</p>
+      </div>
+      </div>
+      <div class="pane" data-pane="kpi" hidden>
+      <div class="card">
+        <h2>Добыча за смену</h2>
+        <div class="tiles">
+          <div><small>Перевезено</small><b id="total_t">—</b></div>
+          <div><small>Темп</small><b id="rate">—</b></div>
+          <div><small>Руда / вскрыша</small><b id="split">—</b></div>
+          <div><small>Очереди самосвалов</small><b id="queue">—</b></div>
+        </div>
+        <canvas id="trend" class="trend"></canvas>
+        <div class="trend-legend"><span><i class="sq" style="background:#c47a35"></i>руда</span><span><i class="sq" style="background:#9a9488"></i>вскрыша</span><span>нарастающим итогом за 12 ч</span></div>
+        <dl class="kpi sep">
+          <dt>Дизель, руда</dt><dd id="lpt_ore">—</dd>
+          <dt>Дизель, вскрыша</dt><dd id="lpt_waste">—</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h2>Диспетчер <small>сервис dispatcher-01</small></h2>
+        <dl class="kpi">
+          <dt>Решений</dt><dd id="decisions">—</dd>
+          <dt>Последнее</dt><dd id="last_decision">—</dd>
+          <dt>Цель: руда / вскрыша</dt><dd id="targets">—</dd>
+          <dt>Откатов на закрепление</dt><dd id="fallbacks">—</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h2>Дробилка и негабарит <small>сервис crusher-guard-01</small></h2>
+        <dl class="kpi">
+          <dt>Состояние</dt><dd id="crusher_state">—</dd>
+          <dt>Глыб &gt; <span id="threshold">1,22</span> м</dt><dd id="boulders">—</dd>
+          <dt>Зависаний дробилки</dt><dd id="jams">—</dd>
+          <dt>Разбито гидромолотом</dt><dd id="rockbreaks">—</dd>
+          <dt>Простой дробилки</dt><dd id="crusher_down">—</dd>
+          <dt>x50 взорванной руды</dt><dd id="x50">—</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h2>Склад и фабрика <small>stockpile-01 · plant-01</small></h2>
+        <dl class="kpi">
+          <dt>Фабрика</dt><dd id="plant_state">—</dd>
+          <dt>Склад дроблёной руды</dt><dd id="stockpile">—</dd>
+        </dl>
+        <div class="bar"><div id="stockpile_fill"></div></div>
+        <dl class="kpi">
+          <dt>Переработано за смену</dt><dd id="plant_t">—</dd>
+          <dt>Медь: фабрика (0,35 % Cu, извл. 88 %)</dt><dd id="cu_plant">—</dd>
+          <dt>Медь в добытой руде (извлекаемая)</dt><dd id="cu_ore">—</dd>
+          <dt>Простой фабрики</dt><dd id="plant_idle">—</dd>
+          <dt>Дробилка ждёт места на складе</dt><dd id="crusher_blocked">—</dd>
+          <dt>Забои продвинулись: руда / вскрыша</dt><dd id="advance">—</dd>
+          <dt>Взорвано в развале: руда / вскрыша</dt><dd id="blasted">—</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h2>Обслуживание <small>fuel-01 · workshop-01 · dozer-01 · grader-01</small></h2>
+        <dl class="kpi">
+          <dt>Заправка (2 места)</dt><dd id="fuel_state">—</dd>
+          <dt>Выдано дизеля</dt><dd id="fuel_l">—</dd>
+          <dt>Мастерская (2 места)</dt><dd id="ws_state">—</dd>
+          <dt>Поломок в пути</dt><dd id="breakdowns">—</dd>
+          <dt>Бульдозер на отвале</dt><dd id="dozer_state">—</dd>
+          <dt>Грейдер</dt><dd id="grader_state">—</dd>
+          <dt>Выводов из забоев при взрыве</dt><dd id="evacuated">—</dd>
+          <dt>Потери без обгона</dt><dd id="headway">—</dd>
+        </dl>
+      </div>
+      <div class="card">
+        <h2>Взрыв и допуск <small>сервис blast-control-01</small></h2>
+        <dl class="kpi">
+          <dt>Этап</dt><dd id="blast_phase">—</dd>
+          <dt>Ветер</dt><dd id="wind">—</dd>
+          <dt>Рудная / вскрышная зона</dt><dd id="zones">—</dd>
+          <dt>CO руда (ПДК 20)</dt><dd id="co_lower">—</dd>
+          <dt>NO₂ руда (ПДК 2)</dt><dd id="no2_lower">—</dd>
+          <dt>Облётов / замеров</dt><dd id="sweeps">—</dd>
+          <dt>Рудный забой закрыт</dt><dd id="shut">—</dd>
+          <dt>Допуск при газе &gt; ПДК</dt><dd id="exposure">—</dd>
+        </dl>
+      </div>
+      </div>
+    </aside>
+  </main>
+  <section class="card results">
+    <h2>Завершённые смены на стенде</h2>
+    <table>
+      <thead><tr><th>Смена</th><th>Диспетч.</th><th>Негабарит</th><th>Взрыв</th><th>Всего, т</th><th>Руда, т</th><th>Вскрыша, т</th><th>Очереди, ч</th><th>Простой дробилки, мин</th><th>Забой закрыт, мин</th><th>В газе, мин</th><th>Л/т руда</th><th>Л/т вскрыша</th><th>Фабрика, т</th><th>Этап</th></tr></thead>
+      <tbody id="history"><tr><td colspan="15" class="empty">Смена ещё не завершилась</td></tr></tbody>
+    </table>
+  </section>
+  <script src="app.js"></script>
+</body>
+</html>

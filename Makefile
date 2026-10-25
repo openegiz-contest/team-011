@@ -1,15 +1,17 @@
-.PHONY: up down ps logs smoke clean example-mine example-mine-stop install uninstall status endpoints upgrade upload-build generate-data copy-build unity-demo check-secrets check-public-host
+.PHONY: up down ps logs smoke clean example-mine example-mine-stop pit pit-experiment install uninstall status endpoints upgrade upload-build generate-data copy-build unity-demo check-secrets check-public-host
 
 # ---------------------------------------------------------------------------
 # Docker Compose deployment (laptops, CI, contest judges): deploy/compose/
 # ---------------------------------------------------------------------------
 COMPOSE_BASE := docker compose -f deploy/compose/docker-compose.yml
-# Once `make example-mine` has run, every compose command also loads the mine
-# overlay, so `down` stops its simulator and `up` keeps its Grafana dashboard.
-# `make clean` forgets it.
+# Once `make example-mine` or `make pit` has run, every compose command also
+# loads that overlay, so `down` stops its services and `up` keeps dashboards.
+# `make clean` forgets them.
 MINE_MARKER  := deploy/compose/.example-mine
 MINE_COMPOSE := examples/mine/compose.yml
-COMPOSE := $(COMPOSE_BASE)$(if $(wildcard $(MINE_MARKER)), -f $(MINE_COMPOSE))
+PIT_MARKER   := deploy/compose/.pit
+PIT_COMPOSE  := mine/compose.yml
+COMPOSE := $(COMPOSE_BASE)$(if $(wildcard $(MINE_MARKER)), -f $(MINE_COMPOSE))$(if $(wildcard $(PIT_MARKER)), -f $(PIT_COMPOSE))
 
 ## Start the whole platform with Docker Compose (first run: generates credentials)
 up:
@@ -49,10 +51,20 @@ example-mine: up
 example-mine-stop:
 	$(COMPOSE_BASE) -f $(MINE_COMPOSE) stop mine-simulator
 
+## Run the NETA open pit (twins, live simulator, modules, UI) on the compose stack
+pit: up
+	$(COMPOSE_BASE) -f $(PIT_COMPOSE) up -d --build --wait --wait-timeout 300
+	@touch $(PIT_MARKER)
+	@echo "NETA open pit running: UI http://127.0.0.1:8095/  Grafana -> Карьер NETA — модули 1–3"
+
+## A/B experiment for every module: replicated shifts, mean and 95 % CI (no platform needed)
+pit-experiment:
+	docker run --rm neta/pit:local python -m openpit.experiment --shifts $(or $(SHIFTS),30)
+
 ## Stop the platform and DELETE all its data and credentials
 clean:
 	$(COMPOSE) down -v --remove-orphans
-	rm -f deploy/compose/.env $(MINE_MARKER)
+	rm -f deploy/compose/.env $(MINE_MARKER) $(PIT_MARKER)
 
 # ---------------------------------------------------------------------------
 # Helm deployment (servers): the chart at the repository root

@@ -1,63 +1,108 @@
 # SUBMISSION
 
-<!-- Fill in every section. The AI Jury studies this file together with the code, the Build Report, the presentation and the Stand's interface. Accepted languages: English, Kazakh, Russian. These hint comments may be deleted. -->
-
 ## Concept
 
-<!-- Written by the Team before the code: your own choice, a few sentences per answer. Everything else in the Submission follows from it. -->
+**Enterprise:** Открытый медный карьер «NETA» — участок добычи и первичной переработки: два забоя (вскрыша и руда), транспорт, дробилка, склад руды, обогатительная фабрика, отвалы, взрывные работы и допуск в зоны после взрыва.
 
-**Enterprise:** <!-- Which mining enterprise, or which part of it, the twin represents. -->
+**Users:** Диспетчер смены (назначение самосвалов), мастер дробилки (негабарит), ВГСЧ / служба допуска после взрыва, механическая служба (ремонт и заправка), начальник смены — через советника `advisor-01`.
 
-**Users:** <!-- Who uses the twin. -->
+**Decision:** Включать ли три модуля (диспетчеризация LP, камера + гидромолот на негабарит, допуск по облёту дрона) вместо регламентных режимов «А», и как реагировать на сбои (останов техники, дождь, закрытие дороги, плохой взрыв, штиль, углубление карьера). Критерий на стенде: тоннаж за смену, простой дробилки, время закрытия рудного забоя, минуты в газе выше ПДК, медь в руде.
 
-**Decision:** <!-- Which decision the twin helps them make. -->
+**Why this choice:** На медном карьере узкие места связаны друг с другом: очереди у забоев, зависания дробилки и долгий/небезопасный допуск после взрыва. Три модуля бьют в эти узлы на одном двойнике, а режимы А/Б и сценарии «что если» дают воспроизводимый замер без смены кода.
 
-**Why this choice:** <!-- Why this enterprise, these users and this decision. -->
-
-**Real or fictional:** <!-- A real object: name it and give the sources of its numbers. A fictional one: which real objects it resembles and where its numbers come from. A real object with sourced numbers scores higher. -->
+**Real or fictional:** Вымышленный карьер, близкий к порфировым месторождениям типа Aktogay / Bozshakol (KAZ Minerals): содержание ~0,35 % Cu, извлечение 88 %, концентрат 24 % Cu. Техника и циклы — по паспортам Cat 793F, Hitachi EX5600-6, Metso 60-89; допуск после взрыва — ПБ 13-407-01; ПДК CO/NO₂ — GN 2.2.5.3532-18; цена меди — LME (~9 500 USD/т). Источники параметров — в `mine/sim/openpit/params.py` (комментарии `SOURCES`) и в выводе `python -m openpit.validate`.
 
 ## Team
 
-<!-- GitHub usernames of the Participants. Other personal data are not required: the repository becomes public after the Freeze (Rules, section 15). -->
-
 | GitHub |
 |---|
-|  |
+| Talant2004 |
+| aleka07 |
 
 ## Mine
 
-<!-- Which part of a mining enterprise the Submission represents (open pit, underground mine, processing plant…), which objects are twins in OpenEgiz, how they are related, and where they are defined in the code. -->
+Открытый карьер глубиной 165 м (этапы −195 / −225 / −255 м), размер ~1800×1200 м. Двойники в пространстве имён `neta.pit` (создаются `python -m openpit.setup_twins`, код: `mine/sim/openpit/twins.py`, `topology.py`, `model.py`, `live.py`):
+
+| Объекты | Thing ID |
+|---|---|
+| Карьер, управление, сценарии | `pit-01`, `control-01`, `whatif-01` |
+| Забои и экскаваторы | `face-upper`, `face-lower`, `shovel-01`, `shovel-02` |
+| Самосвалы (10× Cat 793F) | `truck-01` … `truck-10` |
+| Дороги | `road-ramp`, `road-dump`, `road-dump-2`, `road-crusher`, `road-service` |
+| Дробилка, склад, фабрика | `crusher-01`, `stockpile-01`, `plant-01` |
+| Отвалы, сервис | `dump-01`, `dump-02`, `workshop-01`, `fuel-01`, `dozer-01`, `grader-01` |
+| Дрон и сервисы модулей | `drone-01`, `dispatcher-01`, `crusher-guard-01`, `blast-control-01`, `advisor-01` |
+
+Связи: самосвалы едут по дорогам к забоям / дробилке / отвалам; руда → дробилка → склад → фабрика; вскрыша → отвал (или резервный); после взрыва зоны закрыты до допуска; сервисы читают/пишут признаки через MQTT и Ditto.
+
+Живой стенд: `make pit` → UI http://127.0.0.1:8095/ · Ditto :8081 · Grafana :3000 (дашборд «Карьер NETA — модули 1–3»).
 
 ## Modules and What-if Scenarios
 
-<!-- Modules: functions on top of the twin, from the Mine Map or your own. What-if Scenarios: changes of an operating condition that can be run on the Stand without changing the code (close a road, stop equipment…). Only what works on the Stand is taken into account. -->
-
 | Module or What-if Scenario | What it does | How to see it on the Stand | How to undo it (scenarios) |
 |---|---|---|---|
-|  |  |  |  |
+| **М1. Диспетчеризация** (`dispatch_mode`) | А: закрепление 5/5. Б: сервис `dispatcher-01` (LP / цели по забоям). Эффект vs А (30 смен): **+1 642 т/смену (+3 %)**, очередь 11,8 → 9,5 ч | Вкладка «Управление» → режимы → «1. Диспетчеризация» → **Б**. KPI: решения диспетчера, очереди, тоннаж. Пакетно: `make pit-experiment` | Переключить на **А** или «Перезапустить смену» |
+| **М2. Контроль негабарита** (`oversize_mode`) | А: глыба может заклинить дробилку. Б: камера + гидромолот (`crusher-guard-01`). Эффект: простой дробилки **23 → 1 мин** (−22 мин) | Режим «2. Контроль негабарита» → **Б**. На карте/KPI: зависания, «разбито гидромолотом»; Grafana — простой дробилки | Переключить на **А** |
+| **М3. Допуск после взрыва** (`blast_mode`) | А: регламент ~120 мин + ручные пробы. Б: дрон 24 ячейки, допуск при газе < ПДК, не раньше 30 мин (ПБ). Эффект: **+4 310 т/смену (+7,8 %)**, небезопасные входы **0,20 → 0**, закрытие рудного забоя −22 мин | Режим «3. Допуск после взрыва» → **Б**. После взрыва (06:00 или «Взрыв сейчас»): облёт `drone-01`, газы CO/NO₂, фаза допуска | Переключить на **А** (со следующего взрыва) |
+| **Б · все модули** | М1+М2+М3 | Все три тумблера в **Б**. Сводка vs А: **+6 650 т/смену (+12,1 %)**, Cu **+12,5 т**, простой др. −17 мин | Все в **А** |
+| Остановить shovel-01 / shovel-02 | Экскаватор вскрыши или руды не грузит | Тумблер сценария; на карте `state=stopped`, тоннаж падает | Выключить тумблер или «Отменить все» |
+| Плановая остановка дробилки | `crusher_stop` — дробилка не принимает руду | Тумблер; бункер/очередь на KPI | Выключить / «Отменить все» |
+| Закрыть дорогу на отвал | Рейсы на `dump-02` | Тумблер; поток на резервный отвал | Выключить / «Отменить все» |
+| Дождь | Сопротивление качению 2 % → 4 %, грейдер профилирует | Тумблер; ниже темп, выше л/т | Выключить / «Отменить все» |
+| Плохо взорванный блок | x50 = 0,30 м → больше негабарита | Тумблер; больше зависаний (особенно в А) | Выключить / «Отменить все» |
+| Безветрие при взрыве | Ветер 1 м/с — газ рассеивается дольше | Тумблер + взрыв; в Б дрон не пускает раньше ПДК (0 мин в газе), в А возможны минуты выше ПДК | Выключить / «Отменить все» |
+| Остановка фабрики | Склад заполняется, рудные рейсы блокируются | Тумблер; `plant-01` stopped | Выключить / «Отменить все» |
+| Бульдозер на отвале встал | Отвал принимает по одному, дольше разгрузка | Тумблер; `dozer-01` down | Выключить / «Отменить все» |
+| Этап карьера | Дно −165…−255 м, длиннее рампа | Селект «Этап карьера» (перестраивает геометрию, смена заново) | Вернуть «сейчас, −165 м» |
+| Самосвалов в ремонте | 0…5 машин вне парка | Селект «Самосвалов в ремонте» | Поставить 0 |
+| Взрыв сейчас | Запускает эвакуацию и цикл допуска | Кнопка «Взрыв сейчас» | Ждать открытия зон / перезапуск смены |
+
+Пакетные таблицы (без UI): `make pit-experiment SHIFTS=30`, `python -m openpit.whatif --shifts 20`.
 
 ## What works and what does not
 
-<!-- What has been verified, what is unfinished, which bugs are known. -->
+**Работает (проверено на стенде и в тестах):**
+
+- `make pit` поднимает платформу и карьер; UI на :8095 читает Ditto по SSE.
+- Режимы А/Б трёх модулей, перезапуск смены с тем же seed, ускорение 10…120.
+- Сценарии `whatif-01` (тумблеры, этап карьера, ремонт, «Взрыв сейчас», «Отменить все»).
+- 2D-карта с движением техники; 3D-вид (three.js) с теми же двойниками.
+- Советник смены `advisor-01`, Grafana-дашборд модулей 1–3.
+- Калибровка циклов: `python -m openpit.validate` (скорость на рампе, ковши, загрузка/разгрузка, л/ч, л/т, эффективные часы — в паспортных диапазонах).
+- Тесты: `python -m tests.test_wiring` в `mine/sim`.
+
+**Не закончено / ограничения:**
+
+- Годовой бенчмарк «т на тонну парка / на м³ ковша» в validate выше отраслевого — модель одной смены без годового календаря простоев парка.
+- На узком окне браузера часть KPI в шапке скрывается CSS (часы смены остаются).
+- Сдача в `openegiz-contest/team-011` (ветка `main`).
 
 ## Data and Assumptions
 
-<!--
-- Synthetic and real data.
-- Sources of parameters: equipment data sheets, reference literature, industrial safety regulations, datasets.
-- Datasets: source, license, how they are provided (in the repository or downloaded per the README).
-Confidential data of organizations and personal data are prohibited.
--->
+- **Синтетика:** дискретно-событийная смена 12 ч (SimPy), MQTT-телеметрия в Ditto, без конфиденциальных данных предприятий.
+- **Техника:** Cat 793F (payload, бак, скорость на уклоне, расход) — Specalog / Performance Handbook; Hitachi EX5600-6 (ковш, 4–5 ковшей на 221 т); дробилка Metso 60-89 (зев, бункер).
+- **Безопасность:** ПБ 13-407-01 (допуск ≥ 30 мин после массового взрыва); ПДК CO 20 мг/м³, NO₂ 2 мг/м³ (GN 2.2.5.3532-18).
+- **Руда / экономика:** содержание и извлечение — ориентир KAZ Minerals (Aktogay/Bozshakol); цена Cu 9 500 USD/т (LME).
+- **Фрагментация:** типичный x50 / n (Cunningham); негабарит — доля от зева дробилки (см. `params.py`).
+- **Смена:** пересменка, обед на стоянке во время закрытия забоев на взрыв, заправка, ремонт в мастерской (2 места) и на обочине.
+- Запуск пакетных прогонов — из README / `make pit-experiment`; исходники параметров — `mine/sim/openpit/params.py`.
 
 ## Mine visualization
 
-<!-- Address on the Stand, dashboard or scene; what it shows. -->
+- **Карта карьера (основная визуализация):** http://127.0.0.1:8095/ — 2D и 3D, техника из двойников Ditto (SSE). Переключение 2D/3D в углу карты; вкладки «Управление» / «Показатели».
+- **Grafana:** http://127.0.0.1:3000/ → дашборд «Карьер NETA — модули 1–3» (`mine/grafana/neta-pit.json`): тоннаж, бункер, газы CO/NO₂, цели диспетчера, негабарит, очереди, л/т.
+- **Ditto:** http://127.0.0.1:8081/ — просмотр вещей `neta.pit:*`.
 
 ## Limitations
 
+- Модель одной смены с ускорением; не полный годовой план горных работ и не SCADA с реальной телеметрией парка.
+- Ветер, газ и фрагментация — упрощённые модели (экспоненциальное рассеивание, Weibull ветра, Rosin–Rammler), достаточные для сравнения А/Б, не замена замеров ВГСЧ на реальном объекте.
+- 3D — схематичный twin-вид для пространства карьера; судья без GPU опирается на 2D-карту.
+- Эффект модулей воспроизводится кнопками А/Б и `make pit-experiment`; отдельные цифры в презентации без стенда не используются.
+
 ## Presentation
 
-`presentation.pdf` in the repository root. Video (optional): <link>
+`presentation.pdf` in the repository root. Also `presentation.pptx`. Video (optional): —
 
 ---
 
