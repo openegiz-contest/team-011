@@ -766,8 +766,12 @@ export function createView(container) {
       m.scale.setScalar(hover === name ? EQ * 1.25 : EQ);
     }
 
+    const blastMode = val(twin("control-01"), "blast_mode");
     for (const [face, s] of Object.entries(shovels)) {
       const [fx, fy, fz] = facePos(face);
+      const sh = twin(s.f.shovel);
+      const sx = val(sh, "x"), sy = val(sh, "y"), sz = val(sh, "z");
+      const px = sx != null ? sx : fx, py = sy != null ? sy : fy, pz = sz != null ? sz : fz;
       if (!s.spurAt || Math.hypot(fx - s.spurAt[0], fy - s.spurAt[1]) > 8) {
         s.spurAt = [fx, fy];
         if (s.spur) { scene.remove(s.spur); s.spur.traverse((o) => { o.geometry?.dispose(); o.material?.dispose(); }); s.spur = null; }
@@ -778,13 +782,21 @@ export function createView(container) {
           scene.add(s.spur);
         }
       }
+      // Zone dome/muck stay on the face; only the shovel mesh leaves during evacuation.
       s.fg.position.lerp(tmp.copy(v3(fx, fy, fz)), 0.08);
-      placeShovel(s, s.fg.position.x, -s.fg.position.z);
+      const st = val(sh, "state");
+      const evac = st === "to_safe" || st === "evacuated" || st === "to_face";
+      if (evac) {
+        const world = v3(px, py, pz), faceW = v3(fx, fy, fz);
+        s.m.position.set(world.x - faceW.x, world.y - faceW.y, world.z - faceW.z);
+        s.m.rotation.y = Math.atan2(-(py - fy), px - fx);
+      } else {
+        placeShovel(s, s.fg.position.x, -s.fg.position.z);
+      }
       const blasted = val(twin(face), "blasted_t");
       if (blasted != null) s.muck.count = Math.round(Math.max(3, Math.min(40, blasted / 3000)));
-      const st = val(twin(s.f.shovel), "state");
       s.m.userData.body.material.color.set(st === "loading" ? "#ffb020" : st === "down" || st === "stopped" ? "#ff5a5a"
-        : st === "blast" ? "#ff7b00" : "#d0d7de");
+        : evac ? "#ffb020" : "#d0d7de");
       s.m.userData.house.rotation.y = st === "loading" ? (1 - Math.cos(now / 700)) / 2 * s.swing : 0;
       const closed = val(pit, face === "face-lower" ? "zone_lower" : "zone_upper") === "closed";
       const phase = val(pit, "blast_phase");
@@ -792,6 +804,10 @@ export function createView(container) {
       s.gas.visible = closed && phase === "gas";
       if (s.gas.visible) s.gas.children.forEach((c, i) => { c.position.y = 50 + 25 * Math.sin(now / 1500 + i); });
       s.zoneLbl.visible = closed;
+      if (closed) {
+        setText(s.zoneLbl, phase === "evacuation" ? "эвакуация — взрыв"
+          : (phase === "gas" && blastMode !== "B" ? "газ · проба ВГСЧ" : "закрыто: газ после взрыва"));
+      }
     }
 
     for (const [name, o] of Object.entries(overlays)) {
@@ -871,9 +887,13 @@ export function createView(container) {
         pst === "stopped" ? "#ff7b7b" : pst === "starved" ? "#ffb020" : "");
       for (const [face, s] of Object.entries(shovels)) {
         const sh = twin(s.f.shovel), st = val(sh, "state"), q = val(sh, "queue") || 0;
-        const tag = st === "down" ? " · отказ" : st === "stopped" ? " · остановлен" : st === "no_rock" ? " · нет взорванной массы" : "";
-        setText(s.lbl, `${s.f.shovel} · ${FACE_LABEL[face]}${q ? ` · очередь ${q}` : ""}${tag}`, tag ? "#ff7b7b" : "");
-        setText(s.zoneLbl, val(pit, "blast_phase") === "evacuation" ? "эвакуация — взрыв" : "закрыто: газ после взрыва");
+        const evac = st === "to_safe" || st === "evacuated" || st === "to_face";
+        const tag = st === "down" ? " · отказ" : st === "stopped" ? " · остановлен" : st === "no_rock" ? " · нет взорванной массы"
+          : evac ? " · эвакуация" : "";
+        setText(s.lbl, `${s.f.shovel} · ${FACE_LABEL[face]}${q ? ` · очередь ${q}` : ""}${tag}`, tag ? "#ffb020" : "");
+        const phase = val(pit, "blast_phase");
+        setText(s.zoneLbl, phase === "evacuation" ? "эвакуация — взрыв"
+          : (phase === "gas" && val(twin("control-01"), "blast_mode") !== "B" ? "газ · проба ВГСЧ" : "закрыто: газ после взрыва"));
       }
       badge.style.display = follow ? "block" : "none";
       if (follow) badge.textContent = `камера следует за ${follow} · Esc или двойной щелчок — отпустить`;

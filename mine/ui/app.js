@@ -28,7 +28,8 @@ const STATE_RU = {
   to_face: "порожний рейс к забою", hauling: "гружёный рейс", loading: "погрузка",
   queued_at_shovel: "очередь у экскаватора", queued_at_dump: "очередь на разгрузку", dumping: "разгрузка",
   awaiting_dispatch: "ждёт назначения", parked: "стоянка", to_workshop: "едет в мастерскую", repair: "ремонт",
-  idle: "ожидает", blast: "закрыт на взрыв", down: "отказ", stopped: "остановлен", crushing: "дробит",
+  idle: "ожидает", blast: "закрыт на взрыв", to_safe: "уходит из зоны взрыва", evacuated: "эвакуирован (безопасная площадка)",
+  to_face: "возвращается к забою", down: "отказ", stopped: "остановлен", crushing: "дробит",
   jammed: "зависание", open: "открыта", closed: "закрыта", flying: "облёт", landed: "на базе",
   "face-upper": "верхний забой (вскрыша)", "face-lower": "нижний забой (руда)", crusher: "дробилка",
   dump: "отвал", "dump-2": "резервный отвал", workshop: "мастерская",
@@ -844,27 +845,39 @@ function drawSite() {
   hit("crusher-01", X(cx), Y(cy), 20);
 
   const pit = twin("pit-01");
+  const ctl = twin("control-01");
   const now = performance.now();
   for (const [face, f] of Object.entries(geometry.faces)) {
     const [fx, fy] = facePos(face);
     const shovel = twin(f.shovel);
     const st = val(shovel, "state");
+    const sx = val(shovel, "x"), sy = val(shovel, "y");
+    const [px, py] = (sx != null && sy != null) ? [sx, sy] : [fx, fy];
     if (val(pit, face === "face-lower" ? "zone_lower" : "zone_upper") === "closed") {
       ctx.beginPath();
       ctx.arc(X(fx), Y(fy), 170 * view.s, 0, Math.PI * 2);
       ctx.fillStyle = "rgba(255,90,90,.16)"; ctx.fill();
       ctx.strokeStyle = "rgba(255,90,90,.75)"; ctx.setLineDash([6, 4]); ctx.lineWidth = 1.5; ctx.stroke();
       ctx.setLineDash([]);
-      label(val(pit, "blast_phase") === "evacuation" ? "эвакуация" : "закрыто: газ", fx, fy + 140, "#ff9b9b");
+      const phase = val(pit, "blast_phase");
+      label(phase === "evacuation" ? "эвакуация — взрыв" : "закрыто: газ", fx, fy + 140, "#ff9b9b");
+      if (phase === "gas" && val(ctl, "blast_mode") !== "B") {
+        label("проба ВГСЧ", fx, fy + 175, "#ffb020");
+      }
     }
-    drawShovel(fx, fy, st, now);
+    drawShovel(px, py, st, now);
     const q = val(shovel, "queue") || 0;
-    label(`${f.shovel} · ${FACE_LABEL[face]}${q ? ` · очередь ${q}` : ""}`, fx, fy - 75);
-    if (st === "down") label("отказ", fx, fy + 95, "#ff7b7b");
-    if (st === "stopped") label("остановлен (сценарий)", fx, fy + 95, "#ff7b7b");
-    if (st === "no_rock") label("нет взорванной массы — ждёт взрыва", fx, fy + 95, "#ffb020");
-    if (st === "handover") label("пересменка", fx, fy + 95, "#8b949e");
-    hit(f.shovel, X(fx), Y(fy), 16);
+    const evac = st === "to_safe" || st === "evacuated" || st === "to_face";
+    label(`${f.shovel} · ${FACE_LABEL[face]}${q ? ` · очередь ${q}` : ""}${evac ? " · эвакуация" : ""}`,
+      px, py - 75, evac ? "#ffb020" : undefined);
+    if (st === "down") label("отказ", px, py + 95, "#ff7b7b");
+    if (st === "stopped") label("остановлен (сценарий)", px, py + 95, "#ff7b7b");
+    if (st === "no_rock") label("нет взорванной массы — ждёт взрыва", px, py + 95, "#ffb020");
+    if (st === "handover") label("пересменка", px, py + 95, "#8b949e");
+    if (st === "evacuated") label("безопасная площадка", px, py + 95, "#ffb020");
+    if (st === "to_safe") label("уходит из зоны", px, py + 95, "#ffb020");
+    if (st === "to_face") label("к забою", px, py + 95, "#8b949e");
+    hit(f.shovel, X(px), Y(py), 16);
   }
 }
 

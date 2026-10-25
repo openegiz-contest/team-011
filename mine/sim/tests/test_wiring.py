@@ -198,12 +198,22 @@ def check_shift_logic(seed: int = 1) -> bool:
     t_evac = p.blasting.blast_hour * 3600 - p.blasting.evacuation_min * 60
     model.env.run(until=t_evac + 600)
     at_faces = [t.name for t in model.trucks if t.location in model.pit.faces and t.route is None]
+    # After ~10 min of evacuation the shovels must have left the face for a rim pad.
+    shovels_away = all(
+        math.dist(model.shovels[f].xy[:2], model.pit.faces[f].position[:2]) > 80
+        and model.shovels[f].state in ("to_safe", "evacuated")
+        for f in model.shovels)
     parking = model.pit.points["parking"]
     model.env.run(until=t_evac + 1800)
     eating = [t for t in model.trucks if t.state == "break"]
     near = all(math.dist(model.truck_xy(t)[:2], parking[:2]) < 200 for t in eating)
     model.env.run(until=p.blasting.blast_hour * 3600 + 3 * 3600)
     meals = sum(t.meal_done for t in model.trucks)
+    # Zones reopen after re-entry: shovels walk back and dig again.
+    shovels_back = all(
+        math.dist(model.shovels[f].xy[:2], model.pit.faces[f].position[:2]) < 40
+        and model.shovels[f].state not in ("to_safe", "evacuated", "to_face")
+        for f in model.shovels)
     m = model.run()
     carry = model.carry_out()
     nxt = MineModel(p, seed + 1, DispatchDispatcher(), carry=carry)
@@ -226,11 +236,13 @@ def check_shift_logic(seed: int = 1) -> bool:
     adv.publish()
     hist = adv.history
     history = bool(hist) and hist[0]["until"] is not None and hist[0]["applied"] is True
-    res = {"at_faces_after_evacuation": at_faces, "eating_at_parking": f"{len(eating)} near={near}",
+    res = {"at_faces_after_evacuation": at_faces, "shovels_away": shovels_away, "shovels_back": shovels_back,
+           "eating_at_parking": f"{len(eating)} near={near}",
            "meals": meals, "refuels": m.refuels, "evacuated": m.evacuated, "carried": carried,
            "dozer": dozer, "history": history}
     print("shift logic:", res)
-    return not at_faces and eating and near and meals == len(model.trucks) and carried and dozer and history
+    return (not at_faces and shovels_away and shovels_back and eating and near
+            and meals == len(model.trucks) and carried and dozer and history)
 
 
 def main() -> int:

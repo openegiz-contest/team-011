@@ -55,10 +55,18 @@ example-mine-stop:
 pit: up
 	$(COMPOSE_BASE) -f $(PIT_COMPOSE) up -d --build --wait --wait-timeout 300
 	@touch $(PIT_MARKER)
-	@echo "NETA open pit running."
-	@echo "  Map (2D/3D, modes A/B, what-if)  http://127.0.0.1:8095/"
-	@echo "  Ditto                              http://127.0.0.1:$${DITTO_PORT:-8080}/"
-	@echo "  Grafana → Карьер NETA — модули 1–3  (login printed above by make up)"
+	@echo "Waiting for UI at http://127.0.0.1:8095/ ..."
+	@ok=0; for i in $$(seq 1 90); do \
+		if curl -sf -o /dev/null http://127.0.0.1:8095/; then ok=1; break; fi; \
+		sleep 1; \
+	done; \
+	if [ "$$ok" = 1 ]; then \
+		echo "OK: stand ready — open http://127.0.0.1:8095/ (green Ditto SSE in the header)"; \
+		echo "  Ditto    http://127.0.0.1:$${DITTO_PORT:-8080}/"; \
+		echo "  Grafana  Карьер NETA — модули 1–3 (login printed above by make up)"; \
+	else \
+		echo "FAIL: UI did not respond on http://127.0.0.1:8095/"; exit 1; \
+	fi
 
 ## A/B experiment for every module: replicated shifts, mean and 95 % CI (no platform needed)
 pit-experiment:

@@ -3,7 +3,7 @@ live simulator publishes as telemetry."""
 
 import math
 
-from .model import WHATIF_DEFAULTS
+from .model import EVAC_STATES, WHATIF_DEFAULTS
 from .params import WASTE
 
 NAMESPACE = "neta.pit"
@@ -248,6 +248,11 @@ def snapshot(model, modes: dict, shift: int) -> dict[str, dict]:
             "z": {"value": round(f.position[2], 1), "unit": "m"},
         }
     for face, shovel in model.shovels.items():
+        # While digging, the shovel sits on the advancing face; during blast
+        # evacuation it walks to a rim pad (shovel.xy).
+        if shovel.state not in EVAC_STATES:
+            shovel.xy = model.pit.faces[face].position
+        x, y, z = shovel.xy
         out[shovel.name] = {
             "state": {"value": shovel.state},
             "face": {"value": face},
@@ -255,6 +260,9 @@ def snapshot(model, modes: dict, shift: int) -> dict[str, dict]:
             "load_end_s": {"value": round(shovel.load_end, 1), "unit": "s"},
             "blocked_until_s": {"value": round(min(shovel.blocked_until, 1e9), 1), "unit": "s"},
             "utilization": {"value": round(shovel.busy_s / max(now, 1), 3)},
+            "x": {"value": round(x, 1), "unit": "m"},
+            "y": {"value": round(y, 1), "unit": "m"},
+            "z": {"value": round(z, 1), "unit": "m"},
         }
     for truck in model.trucks:
         x, y, z = model.truck_xy(truck)

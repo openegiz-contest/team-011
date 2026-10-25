@@ -117,9 +117,10 @@ class Truck:
 
 
 class Shovel:
-    def __init__(self, env: simpy.Environment, name: str, face: str):
+    def __init__(self, env: simpy.Environment, name: str, face: str, xy: tuple = (0.0, 0.0, 0.0)):
         self.name = name
         self.face = face
+        self.xy = xy
         self.resource = simpy.PriorityResource(env, capacity=1)
         self.state = "idle"
         self.loading: Truck | None = None
@@ -127,6 +128,8 @@ class Shovel:
         self.blocked_until = 0.0
         self.busy_s = 0.0
         self.down_s = 0.0
+
+EVAC_STATES = frozenset({"to_safe", "evacuated", "to_face"})
 
 
 class Crusher:
@@ -198,7 +201,8 @@ class MineModel(PitKnowledge):
         self.metrics = Metrics()
         self._segments: dict[tuple, list] = {}
         self.breakdowns: list[dict] = []
-        self.shovels = {f.name: Shovel(self.env, f.shovel, f.name) for f in self.pit.faces.values()}
+        self.shovels = {f.name: Shovel(self.env, f.shovel, f.name, f.position)
+                        for f in self.pit.faces.values()}
         self.crusher = Crusher(self.env, params.crusher.pocket_t)
         self.plant = Plant(params.plant)
         self.face_mined_t = {face: 0.0 for face in self.pit.faces}
@@ -689,7 +693,8 @@ class MineModel(PitKnowledge):
         for face, shovel in self.shovels.items():
             st.zones[face] = "closed"
             closed_at[face] = env.now
-            env.process(self.block_shovel(shovel, None, "blast", releases[face]))
+            # Leave the blast zone: walk to a rim pad, wait until re-entry, walk back.
+            env.process(self._evacuate_shovel(shovel, releases[face]))
             self._closing[face].succeed()
         # The fleet stands anyway: the meal is taken now, at the park-up.
         for truck in self.trucks:
@@ -847,6 +852,50 @@ class MineModel(PitKnowledge):
             shovel.down_s += self.env.now - start
             if reason == "no_rock":
                 self.metrics.no_rock_s += self.env.now - start
+            shovel.blocked_until = self.env.now
+            shovel.state = "idle"
+
+    def _shovel_safe(self, face: str) -> tuple:
+        """Rim pad outside the pit exit: shovels wait here while the zone is closed."""
+        exit_ = self.pit.ramp[0]
+        # Offset so the two shovels do not stack on one spot.
+        off = (-90.0, 140.0) if face == "face-upper" else (110.0, 90.0)
+        return (exit_[0] + off[0], exit_[1] + off[1], 0.0)
+
+    def _walk_shovel(self, shovel: Shovel, dest: tuple, seconds: float, step_s: float = 30.0):
+        """Move shovel.xy from its current point to dest over `seconds`."""
+        start = shovel.xy
+        t0 = self.env.now
+        while True:
+            elapsed = self.env.now - t0
+            if elapsed >= seconds:
+                shovel.xy = dest
+                return
+            k = elapsed / seconds
+            shovel.xy = (start[0] + (dest[0] - start[0]) * k,
+                         start[1] + (dest[1] - start[1]) * k,
+                         start[2] + (dest[2] - start[2]) * k)
+            yield self.env.timeout(min(step_s, seconds - elapsed))
+
+    def _evacuate_shovel(self, shovel: Shovel, release):
+        """Walk out of the blast zone, wait for re-entry, walk back to the face."""
+        face = shovel.face
+        walk_s = 8 * 60  # ~8 min crawl to the rim pad
+        with shovel.resource.request(priority=0) as req:
+            yield req
+            start = self.env.now
+            shovel.blocked_until = math.inf
+            from_face = self.pit.faces[face].position
+            shovel.xy = from_face
+            shovel.state = "to_safe"
+            yield from self._walk_shovel(shovel, self._shovel_safe(face), walk_s)
+            shovel.state = "evacuated"
+            yield release
+            shovel.state = "to_face"
+            back = self.pit.faces[face].position
+            yield from self._walk_shovel(shovel, back, walk_s)
+            shovel.xy = self.pit.faces[face].position
+            shovel.down_s += self.env.now - start
             shovel.blocked_until = self.env.now
             shovel.state = "idle"
 
